@@ -1,6 +1,6 @@
 # anidub-api #
 
-Not the official IPA for the site AniDub
+Not the official API for the site AniDub
 
 ### Features ###
 * get anime list
