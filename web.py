@@ -10,6 +10,21 @@ fakeHeaders = {
     'User-Agent' : 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/68.0.3440.106 Safari/537.36'
 }
 
+@app.route('/getAnimeEpisodes/<page>')
+def getAnimeList(newsId):
+    html = requests.get("http://anime.anidub.com/?newsid=" + newsId, headers=fakeHeaders).content
+	tree = etree.HTML(html.decode("utf-8"))
+	contents = tree.xpath('.//select[@id = "sel3"]')
+	data = []
+	for x in contents:
+		for i in range(0, len(contents[0])):
+			data.append({
+				'episode' : x.xpath('.//option/text()')[i],
+				'url' : x.xpath('.//option/@value')[i]
+			})
+			
+	return jsonify(data)
+
 @app.route('/getAnimeList/<page>')
 def getAnimeList(page = 1):
     html = requests.get("https://anime.anidub.com/page/" + page, headers=fakeHeaders).content
