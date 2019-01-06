@@ -59,30 +59,34 @@ def getMediaList(page = 1):
     data = []
     for x in contents:
         short_news = etree.tostring(x).decode("utf-8")
-        rating = x.xpath('.//b[@itemprop = "ratingValue"]/text()') if 'itemprop="ratingValue"' in short_news else x.xpath('.//div[@class = "rate_view"]/b/text()') if 'class="rate_view"' in short_news else []
-        ###########
-        title = x.xpath('.//div[@class = "poster_img"]/a/img/@alt')
-        ###########
-        year = x.xpath('.//ul[@class = "reset"]/li[1]/span/a/text()')[0] if 'itemprop="year"' in short_news else []
-        genres = x.xpath('.//ul[@class = "reset"]/li[2]/span/a/text()')[0] if 'itemprop="genre"' in short_news else []
-        country = x.xpath('.//ul[@class = "reset"]/li[3]/span/a/text()')[0]  if 'itemprop="year"' in short_news else []
-        episodes = []
-        description = x.xpath('.//div[@class = "maincont"]/div[@style="display:inline;"]/text()')[0][0:-1] if 'itemprop="description"' in short_news else []
-        news_id = x.xpath('.//div[@class="poster_img"]/a/@href')[0].split('/')[-1].split('-')[0]
-        ###########
-        data.append({
-            'title' : title[0].replace("Смотреть аниме ", ""),
-            'year' : year,
-            'poster' : x.xpath('.//div[@class = "poster_img"]/a/img/@data-original')[0],
-            'genres' : genres,
-            'country' : country,
-            'episodes' : episodes,
-            'description': description,
-            'rating' : rating,
-            'newsId' : news_id
-        })
+        if 'itemprop="year"' in short_news and 'itemprop="genre"' in short_news:
+            rating = x.xpath('.//b[@itemprop = "ratingValue"]/text()') if 'itemprop="ratingValue"' in short_news else x.xpath('.//div[@class = "rate_view"]/b/text()') if 'class="rate_view"' in short_news else []
+            ###########
+            title = x.xpath('.//div[@class = "poster_img"]/a/img/@alt')[0].replace("Смотреть аниме ", "").rsplit("/", 1)
+            ###########
+            year = x.xpath('.//ul[@class = "reset"]/li[1]/span/a/text()')[0]
+            genres = ", ".join(x.xpath('.//ul[@class = "reset"]/li[2]/span/a/text()'))
+            country = x.xpath('.//ul[@class = "reset"]/li[3]/span/a/text()')[0]
+            episodes_row = re.search(r"\[(.*?)\]", title[-1])
+            episodes = [] if episodes_row is None else episodes_row.group(1)
+            
+            description = x.xpath('.//div[@class = "maincont"]/div[@style="display:inline;"]/text()')[0][0:-1]
+            news_id = x.xpath('.//div[@class="poster_img"]/a/@href')[0].split('/')[-1].split('-')[0]
+            ###########
+            
+            data.append({
+                'title' : title[0],
+                'year' : year,
+                'poster' : x.xpath('.//div[@class = "poster_img"]/a/img/@data-original')[0],
+                'genres' : genres,
+                'country' : country,
+                'episodes' : episodes,
+                'description': description,
+                'rating' : rating,
+                'newsId' : news_id
+            })
 
     return jsonify(data)
 
 if __name__ == '__main__':
-    app.run(host='127.0.0.1', debug=False)
+    app.run(host='127.0.0.1', port=5000, debug=False)
