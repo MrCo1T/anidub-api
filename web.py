@@ -60,7 +60,8 @@ def getMediaList(page = 1):
     for x in contents:
         short_news = etree.tostring(x).decode("utf-8")
         if 'itemprop="year"' in short_news and 'itemprop="genre"' in short_news:
-            rating = x.xpath('.//b[@itemprop = "ratingValue"]/text()') if 'itemprop="ratingValue"' in short_news else x.xpath('.//div[@class = "rate_view"]/b/text()') if 'class="rate_view"' in short_news else []
+            rating_row = x.xpath('.//b[@itemprop = "ratingValue"]/text()')[0] if 'itemprop="ratingValue"' in short_news else x.xpath('.//div[@class = "rate_view"]/b/text()')[0] if 'class="rate_view"' in short_news else []
+            rating = rating_row + " из 100%" if "%" in rating_row else rating_row + " из 5"
             ###########
             title = x.xpath('.//div[@class = "poster_img"]/a/img/@alt')[0].replace("Смотреть аниме ", "").rsplit("/", 1)
             ###########
