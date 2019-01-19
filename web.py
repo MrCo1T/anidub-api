@@ -1,9 +1,11 @@
+# coding=utf-8
+
 import re
 from urllib.parse import urlparse
 from flask import Flask, request, jsonify
 import requests
 from lxml import etree
-
+import sys
 HEADERS = {
     "User-Agent" : "Mozilla/5.0 (Linux; Android 4.4.2; Nexus 4 Build/KOT49H) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/34.0.1847.114 Mobile Safari/537.36"
 }
@@ -27,6 +29,80 @@ app = Flask(__name__)
 #     chunk = response_chunk.replace("n_", playlist.replace("playlist.m3u8", "n_"))
 #     return chunk
 
+@app.route("/media/search", methods=["GET"])
+def mediaSearch():
+    result = []
+    data = []
+    search_text = request.args.get("q")
+    search_page = request.args.get("page")
+
+    post_data = {
+        "do" : "search",
+        "subaction" : "search",
+        "search_start" : search_page,
+        "full_search" : "0",
+        "result_from" : "1",
+        "story" : search_text
+    }
+
+    search_data = session.post("http://online.anidub.com/index.php?do=search", data=post_data, headers=HEADERS).content
+    tree = etree.HTML(search_data)
+    news_title = tree.xpath('.//div[@class = "newstitle"]')
+    news_info = tree.xpath('.//div[@class = "newsinfo"]')
+    news_short = tree.xpath('.//div[@class = "news_short"]')
+    news_short.pop(0)
+    for n_title, n_info, n_short in zip(news_title, news_info, news_short):
+        pages = tree.xpath('.//span[@class = "navigation"]')
+        last_page = pages[0].xpath(".//a/text()")[-1] if pages else 1
+        title = ''.join(n_title.xpath('.//div[@class="title"]/a/text()')).rsplit("/", 1)
+        news_id = ''.join(n_title.xpath('.//div[@class="title"]/a/@href')).split('/')[-1].split('-')[0]
+        category = ''.join(n_info.xpath('.//div[@style="background: none;"]/a/@href'))
+
+        if "anidub_news" not in category and "videoblog" not in category:
+            main_content = etree.tostring(n_short).decode("utf-8")
+            rating_row = ''.join(n_short.xpath('.//b[@itemprop = "ratingValue"]/text()')) if 'itemprop="ratingValue"' in main_content else ''.join(n_short.xpath('.//div[@class = "rate_view"]/b/text()')) if 'class="rate_view"' in main_content else []
+            poster = ''.join(n_short.xpath('.//div[@class = "poster_img"]/img/@src'))
+            details = n_short.xpath('.//ul[@class="reset"]/li')
+            for current_detail in details:
+                detail = etree.tostring(current_detail).decode("utf-8")
+                if "&#1043;&#1086;&#1076;:" in detail: year = ''.join(current_detail.xpath('.//span/text()'))
+                if "&#1046;&#1072;&#1085;&#1088;:" in detail: genre = ', '.join(current_detail.xpath('.//span/a/text()'))
+                if "&#1057;&#1090;&#1088;&#1072;&#1085;&#1072;:" in detail: country = ''.join(current_detail.xpath('.//span/text()'))
+                if "&#1044;&#1072;&#1090;&#1072; &#1074;&#1099;&#1087;&#1091;&#1089;&#1082;&#1072;:" in detail: pub_date = ''.join(current_detail.xpath('.//span/text()'))
+                if "&#1056;&#1077;&#1078;&#1080;&#1089;&#1089;&#1077;&#1088;:" in detail: producer = ''.join(current_detail.xpath('.//span/a/text()'))
+                if "&#1057;&#1094;&#1077;&#1085;&#1072;&#1088;&#1080;&#1089;&#1090;:" in detail: author = ''.join(current_detail.xpath('.//span/a/text()')) 
+                if "&#1054;&#1079;&#1074;&#1091;&#1095;&#1080;&#1074;&#1072;&#1085;&#1080;&#1077;:" in detail: voicer = ', '.join(current_detail.xpath('.//span/a/text()')) 
+            episode_row = re.search(r"\[(.*?)\]", title[-1])
+            episode = "1 из 1" if not episode_row else episode_row.group(1)
+            title_ru = title[0]
+            title_en = title[-1].split("[")[0].lstrip()
+            if "display:inline;" in main_content: description = ''.join(n_short.xpath('.//div[@style="display:inline;"]/text()'))
+            result.append({
+                "title"    : {
+                    "ru"     : title_ru,
+                    "en"    : title_en
+                },
+                "newsID"   : news_id,
+                "rating"   : rating_row,
+                "poster"   : poster,
+                "year"     : year,
+                "genre"    : genre,
+                "country"  : country,
+                "episode"  : episode, 
+                "pubDate"  : pub_date,
+                "producer" : producer,
+                "author"   : author,
+                "voicer"   : voicer,
+                "description" : description
+            })
+
+    data.append({
+        "last_page" : last_page,
+        "data" : result
+    })
+
+    return jsonify(data)
+
 @app.route("/media/content", methods=["GET"])
 def getMediaContent():
     media_url = request.args.get("media_url").split("|")[0]
@@ -47,9 +123,10 @@ def getMediaContent():
             for x in devide_quality_urls:
                 current_quality = re.search(r"\[(.*?)\]", x).group(1)
                 current_content_url = x.replace(f"[{current_quality}]", "")
-                data.append({
-                    current_quality : current_content_url
-                })
+            data.append({
+                current_quality : current_content_url
+            })
+            print(data)
 
     elif player_type == "anime.anidub.com":
 
@@ -92,41 +169,43 @@ def getMediaEpisodes(news_id):
     sibnet_player_episodes = []
         
     if "ya" in media_player:
-        data_players.append("stormo")
+        data_players.append("Stormo")
         stormo_contents = tree.xpath('.//select[@id = "sel3"]')
         
-        for stormo_player in stormo_contents:
-            for i in range(0, len(stormo_contents[0])):
+        for stormo_player, i in zip(stormo_contents, range(0, len(stormo_contents[0]))):
                 stormo_player_titles.append(stormo_player.xpath('.//option/text()')[i])
                 stormo_player_episodes.append(stormo_player.xpath('.//option/@value')[i])
 
     if "our" in media_player:
-        data_players.append("anidub_player")
+        data_players.append("Anidub")
         anidub_player_contents = tree.xpath('.//select[@id = "sel2"]')
         
-        for anidub_player in anidub_player_contents:
-            for i in range(0, len(anidub_player_contents[0])):
-                anidub_player_titles.append(anidub_player.xpath('.//option/text()')[i])
-                anidub_player_episodes.append(anidub_player.xpath('.//option/@value')[i])
+        for anidub_player, i in zip(anidub_player_contents, range(0, len(anidub_player_contents[0]))):
+            anidub_player_titles.append(anidub_player.xpath('.//option/text()')[i])
+            anidub_player_episodes.append(anidub_player.xpath('.//option/@value')[i])
 
     if "vk" in media_player:
-        data_players.append("sibnet")
+        data_players.append("Sibnet")
         sibnet_player_contents = tree.xpath('.//select[@id = "sel"]')
         
-        for sibnet_player in sibnet_player_contents:
-            for i in range(0, len(sibnet_player_contents[0])):
+        if sibnet_player_contents:
+            for sibnet_player, i in zip(sibnet_player_contents, range(0, len(sibnet_player_contents[0]))):
                 sibnet_player_titles.append(sibnet_player.xpath('.//option/text()')[i])
                 sibnet_player_episodes.append(sibnet_player.xpath('.//option/@value')[i])
-    print(anidub_player_titles)
+        else:
+            sibnet_player_titles.append(anidub_player_titles[0] if anidub_player_titles else stormo_player_titles[0] if stormo_player_titles else "")
+            sibnet_player_episodes.append(tree.xpath('.//div[@id = "mcode_block"]/iframe/@src')[0].replace("//", "https://"))
+            print(sibnet_player_episodes)
+				
     data.append({
         "players" : data_players,
         
         "episodes" : {
             "title" : stormo_player_titles if stormo_player_titles else anidub_player_titles if anidub_player_titles else sibnet_player if sibnet_player else "",
             "url" : {
-                "stormo" if "stormo" in data_players else "" : stormo_player_episodes,
-                "anidub_player" if "anidub_player" in data_players else "" : anidub_player_episodes,
-                "sibnet" if "sibnet" in data_players else "" : sibnet_player_episodes
+                "Stormo" if "Stormo" in data_players else "" : stormo_player_episodes,
+                "Anidub" if "Anidub" in data_players else "" : anidub_player_episodes,
+                "Sibnet" if "Sibnet" in data_players else "" : sibnet_player_episodes
             }
         }
     })
@@ -136,41 +215,65 @@ def getMediaEpisodes(news_id):
 
 @app.route("/media/list/<page>", methods=["GET"])
 def getMediaList(page = 1):
+    data = []
+    result = []
     html = session.get("http://online.anidub.com/page/" + page, headers=HEADERS).text
     tree = etree.HTML(html)
-    contents = tree.xpath('.//div[@class = "news_short"]')
-    data = []
-    for x in contents:
-        short_news = etree.tostring(x).decode("utf-8")
-        if 'itemprop="year"' in short_news and 'itemprop="genre"' in short_news:
-            rating_row = x.xpath('.//b[@itemprop = "ratingValue"]/text()')[0] if 'itemprop="ratingValue"' in short_news else x.xpath('.//div[@class = "rate_view"]/b/text()')[0] if 'class="rate_view"' in short_news else []
-            rating = rating_row + " из 100%" if "%" in rating_row else rating_row + " из 5"
-            ###########
-            title = x.xpath('.//div[@class = "poster_img"]/a/img/@alt')[0].replace("Смотреть аниме ", "").rsplit("/", 1)
-            ###########
-            year = x.xpath('.//ul[@class = "reset"]/li[1]/span/a/text()')[0]
-            genres = ", ".join(x.xpath('.//ul[@class = "reset"]/li[2]/span/a/text()'))
-            country = x.xpath('.//ul[@class = "reset"]/li[3]/span/a/text()')[0]
-            episodes_row = re.search(r"\[(.*?)\]", title[-1])
-            episodes = [] if episodes_row is None else episodes_row.group(1)
-            
-            description = x.xpath('.//div[@class = "maincont"]/div[@style="display:inline;"]/text()')[0][0:-1]
-            news_id = x.xpath('.//div[@class="poster_img"]/a/@href')[0].split('/')[-1].split('-')[0]
-            ###########
-            
-            data.append({
-                'title' : title[0],
-                'year' : year,
-                'poster' : x.xpath('.//div[@class = "poster_img"]/a/img/@data-original')[0],
-                'genres' : genres,
-                'country' : country,
-                'episodes' : episodes,
-                'description': description,
-                'rating' : rating,
-                'newsId' : news_id
+    news_title = tree.xpath('.//div[@class = "newstitle"]')
+    news_info = tree.xpath('.//div[@class = "newsinfo"]')
+    news_short = tree.xpath('.//div[@class = "news_short"]')
+    for n_title, n_info, n_short in zip(news_title, news_info, news_short):
+        pages = tree.xpath('.//span[@class = "navigation"]')
+        last_page = pages[0].xpath(".//a/text()")[-1] if pages else 1
+        title = ''.join(n_title.xpath('.//h2[@class="title"]/a/text()')).rsplit("/", 1)
+        news_id = ''.join(n_title.xpath('.//h2[@class="title"]/a/@href')).split('/')[-1].split('-')[0]
+        category = ''.join(n_info.xpath('.//h4[@style="float: left;"]/a/@href'))
+
+        if "anidub_news" not in category and "videoblog" not in category:
+            main_content = etree.tostring(n_short).decode("utf-8")
+            rating_row = ''.join(n_short.xpath('.//b[@itemprop = "ratingValue"]/text()')) if 'itemprop="ratingValue"' in main_content else ''.join(n_short.xpath('.//div[@class = "rate_view"]/b/text()')) if 'class="rate_view"' in main_content else []
+            # rating = rating_row + u" из 100%" if "%" in rating_row else rating_row + u" из 5"
+            poster = ''.join(n_short.xpath('.//div[@class = "poster_img"]/a/img/@data-original'))
+            details = n_short.xpath('.//ul[@class="reset"]/li')
+            for current_detail in details:
+                detail = etree.tostring(current_detail).decode("utf-8")
+                if "&#1043;&#1086;&#1076;:" in detail: year = ''.join(current_detail.xpath('.//span/a/text()'))
+                if "&#1046;&#1072;&#1085;&#1088;:" in detail: genre = ', '.join(current_detail.xpath('.//span/a/text()'))
+                if "&#1057;&#1090;&#1088;&#1072;&#1085;&#1072;:" in detail: country = ''.join(current_detail.xpath('.//span/a/text()'))
+                if "&#1044;&#1072;&#1090;&#1072; &#1074;&#1099;&#1087;&#1091;&#1089;&#1082;&#1072;:" in detail: pub_date = ''.join(current_detail.xpath('.//span/text()'))
+                if "&#1056;&#1077;&#1078;&#1080;&#1089;&#1089;&#1077;&#1088;:" in detail: producer = ''.join(current_detail.xpath('.//span/a/text()'))
+                if "&#1057;&#1094;&#1077;&#1085;&#1072;&#1088;&#1080;&#1089;&#1090;:" in detail: author = ''.join(current_detail.xpath('.//span/a/text()')) 
+                if "&#1054;&#1079;&#1074;&#1091;&#1095;&#1080;&#1074;&#1072;&#1085;&#1080;&#1077;:" in detail: voicer = ', '.join(current_detail.xpath('.//span/a/text()')) 
+            episode_row = re.search(r"\[(.*?)\]", title[-1])
+            episode = "1 из 1" if not episode_row else episode_row.group(1)
+            title_ru = title[0]
+            title_en = title[-1].split("[")[0].lstrip()
+            if "&#1054;&#1087;&#1080;&#1089;&#1072;&#1085;&#1080;&#1077;" in main_content: description = ''.join(n_short.xpath('.//div[@style="display:inline;"]/text()'))
+            result.append({
+                "title"    : {
+                    "ru"     : title_ru,
+                    "en"    : title_en
+                },
+                "newsID"   : news_id,
+                "rating"   : rating_row,
+                "poster"   : poster,
+                "year"     : year,
+                "genre"    : genre,
+                "country"  : country,
+                "episode"  : episode, 
+                "pubDate"  : pub_date,
+                "producer" : producer,
+                "author"   : author,
+                "voicer"   : voicer,
+                "description" : description
             })
+
+    data.append({
+        "last_page" : last_page,
+        "data" : result
+    })
 
     return jsonify(data)
 
 if __name__ == '__main__':
-    app.run(host='127.0.0.1', port=5000, debug=False)
+    app.run(host='127.0.0.1', port=5000, debug=True)
