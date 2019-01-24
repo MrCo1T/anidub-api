@@ -1,11 +1,18 @@
 # coding=utf-8
 
 import re
-from urllib.parse import urlparse
-from flask import Flask, request, jsonify
 import requests
+import rapidjson
 from lxml import etree
-import sys
+from urllib.parse import urlparse
+from urllib.parse import quote
+from flask import Flask
+from flask import abort
+from flask import request
+from flask import jsonify
+from flask import Response
+from flask import stream_with_context
+
 HEADERS = {
     "User-Agent" : "Mozilla/5.0 (Linux; Android 4.4.2; Nexus 4 Build/KOT49H) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/34.0.1847.114 Mobile Safari/537.36"
 }
@@ -22,12 +29,39 @@ session = requests.session()
 
 app = Flask(__name__)
 
-# def anidubPlayerParseChunks(playlist : str) -> str:
-#     response_main = requests.get(playlist, headers=HEADERS).text
-#     chunk_file = playlist.replace("playlist.m3u8", response_main.splitlines()[-1])
-#     response_chunk = requests.get(chunk_file, headers=HEADERS).text
-#     chunk = response_chunk.replace("n_", playlist.replace("playlist.m3u8", "n_"))
-#     return chunk
+@app.route("/anime/preview", methods=["GET"])
+def whatsAnimePreview():
+    resp = requests.get(f"https://trace.moe/preview.php?anilist_id={request.args.get('id')}&file={quote(request.args.get('file'))}&t={request.args.get('t')}&token={request.args.get('token')}", headers=HEADERS)
+    return Response(stream_with_context(resp.iter_content()), content_type = resp.headers['Content-Type'])
+
+@app.route("/anime/find", methods=["POST"])
+def whatsAnimeFromScreenshot():
+    data = []
+    image = request.form.get("image")
+    response = session.post("https://trace.moe/api/search?token=4ad4c15520f90753d4f4d88f970323c5641cd9bb", headers=HEADERS, data={"image" : image}).text
+    json_result = rapidjson.loads(response)
+
+    anilist_id = json_result["docs"][0]["anilist_id"]
+    filename = json_result["docs"][0]["filename"]
+    prev_at = json_result["docs"][0]["at"]
+    prev_to = json_result["docs"][0]["to"]
+    tokenthumb = json_result["docs"][0]["tokenthumb"]
+    preview = f"http://anidub-ru.mrcolt.ru/anime/preview?id={anilist_id}&file={quote(filename)}&t={prev_at}&token={tokenthumb}"
+    similarity_row = str(json_result["docs"][0]["similarity"])
+    if "0." in similarity_row:
+        similarity = similarity_row.replace("0.", "")[0:2] + "%"
+    else:
+        similarity = "100%"
+
+    data.append({
+        "title" : json_result["docs"][0]["title_english"],
+        "episode" : json_result["docs"][0]["episode"],
+        "similarity" : similarity,
+        "hentai" : json_result["docs"][0]["is_adult"],
+        "preview" : preview
+    })
+
+    return jsonify(data)
 
 @app.route("/media/search", methods=["GET"])
 def mediaSearch():
@@ -45,7 +79,7 @@ def mediaSearch():
         "story" : search_text
     }
 
-    search_data = session.post("http://online.anidub.com/index.php?do=search", data=post_data, headers=HEADERS).content
+    search_data = session.post("http://online.anidub.com/index.php?do=search", data=post_data, headers=HEADERS).text
     tree = etree.HTML(search_data)
     news_title = tree.xpath('.//div[@class = "newstitle"]')
     news_info = tree.xpath('.//div[@class = "newsinfo"]')
@@ -67,10 +101,10 @@ def mediaSearch():
                 detail = etree.tostring(current_detail).decode("utf-8")
                 if "&#1043;&#1086;&#1076;:" in detail: year = ''.join(current_detail.xpath('.//span/text()'))
                 if "&#1046;&#1072;&#1085;&#1088;:" in detail: genre = ', '.join(current_detail.xpath('.//span/a/text()'))
-                if "&#1057;&#1090;&#1088;&#1072;&#1085;&#1072;:" in detail: country = ''.join(current_detail.xpath('.//span/text()'))
-                if "&#1044;&#1072;&#1090;&#1072; &#1074;&#1099;&#1087;&#1091;&#1089;&#1082;&#1072;:" in detail: pub_date = ''.join(current_detail.xpath('.//span/text()'))
-                if "&#1056;&#1077;&#1078;&#1080;&#1089;&#1089;&#1077;&#1088;:" in detail: producer = ''.join(current_detail.xpath('.//span/a/text()'))
-                if "&#1057;&#1094;&#1077;&#1085;&#1072;&#1088;&#1080;&#1089;&#1090;:" in detail: author = ''.join(current_detail.xpath('.//span/a/text()')) 
+                country = ''.join(current_detail.xpath('.//span/text()')) if "&#1057;&#1090;&#1088;&#1072;&#1085;&#1072;:" in detail else "неизвестная"
+                pub_date = ''.join(current_detail.xpath('.//span/text()')) if "&#1044;&#1072;&#1090;&#1072; &#1074;&#1099;&#1087;&#1091;&#1089;&#1082;&#1072;:" in detail else "NaN"
+                producer = ''.join(current_detail.xpath('.//span/a/text()')) if "&#1056;&#1077;&#1078;&#1080;&#1089;&#1089;&#1077;&#1088;:" in detail else "неизвестный"
+                author = ''.join(current_detail.xpath('.//span/a/text()')) if "&#1057;&#1094;&#1077;&#1085;&#1072;&#1088;&#1080;&#1089;&#1090;:" in detail else "неизвестный"
                 if "&#1054;&#1079;&#1074;&#1091;&#1095;&#1080;&#1074;&#1072;&#1085;&#1080;&#1077;:" in detail: voicer = ', '.join(current_detail.xpath('.//span/a/text()')) 
             episode_row = re.search(r"\[(.*?)\]", title[-1])
             episode = "1 из 1" if not episode_row else episode_row.group(1)
@@ -239,10 +273,10 @@ def getMediaList(page = 1):
                 detail = etree.tostring(current_detail).decode("utf-8")
                 if "&#1043;&#1086;&#1076;:" in detail: year = ''.join(current_detail.xpath('.//span/a/text()'))
                 if "&#1046;&#1072;&#1085;&#1088;:" in detail: genre = ', '.join(current_detail.xpath('.//span/a/text()'))
-                if "&#1057;&#1090;&#1088;&#1072;&#1085;&#1072;:" in detail: country = ''.join(current_detail.xpath('.//span/a/text()'))
-                if "&#1044;&#1072;&#1090;&#1072; &#1074;&#1099;&#1087;&#1091;&#1089;&#1082;&#1072;:" in detail: pub_date = ''.join(current_detail.xpath('.//span/text()'))
-                if "&#1056;&#1077;&#1078;&#1080;&#1089;&#1089;&#1077;&#1088;:" in detail: producer = ''.join(current_detail.xpath('.//span/a/text()'))
-                if "&#1057;&#1094;&#1077;&#1085;&#1072;&#1088;&#1080;&#1089;&#1090;:" in detail: author = ''.join(current_detail.xpath('.//span/a/text()')) 
+                country = ''.join(current_detail.xpath('.//span/a/text()')) if "&#1057;&#1090;&#1088;&#1072;&#1085;&#1072;:" in detail else "неизвестная"
+                pub_date = ''.join(current_detail.xpath('.//span/text()')) if "&#1044;&#1072;&#1090;&#1072; &#1074;&#1099;&#1087;&#1091;&#1089;&#1082;&#1072;:" in detail else "NaN"
+                producer = ''.join(current_detail.xpath('.//span/a/text()')) if "&#1056;&#1077;&#1078;&#1080;&#1089;&#1089;&#1077;&#1088;:" in detail else "неизвестный"
+                author = ''.join(current_detail.xpath('.//span/a/text()')) if "&#1057;&#1094;&#1077;&#1085;&#1072;&#1088;&#1080;&#1089;&#1090;:" in detail else "неизвестный"
                 if "&#1054;&#1079;&#1074;&#1091;&#1095;&#1080;&#1074;&#1072;&#1085;&#1080;&#1077;:" in detail: voicer = ', '.join(current_detail.xpath('.//span/a/text()')) 
             episode_row = re.search(r"\[(.*?)\]", title[-1])
             episode = "1 из 1" if not episode_row else episode_row.group(1)
@@ -274,6 +308,10 @@ def getMediaList(page = 1):
     })
 
     return jsonify(data)
+
+@app.route("/", methods=["GET"])
+def index():
+    return "wat do u want?"
 
 if __name__ == '__main__':
     app.run(host='127.0.0.1', port=5000, debug=True)
