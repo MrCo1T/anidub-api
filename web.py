@@ -4,13 +4,13 @@ import re
 import requests
 import rapidjson
 from lxml import etree
-from urllib.parse import urlparse
-from urllib.parse import quote
 from flask import Flask
 from flask import abort
 from flask import request
 from flask import jsonify
 from flask import Response
+from urllib.parse import quote
+from urllib.parse import urlparse
 from flask import stream_with_context
 
 HEADERS = {
@@ -46,7 +46,7 @@ def whatsAnimeFromScreenshot():
     prev_at = json_result["docs"][0]["at"]
     prev_to = json_result["docs"][0]["to"]
     tokenthumb = json_result["docs"][0]["tokenthumb"]
-    preview = f"http://anidub-ru.mrcolt.ru/anime/preview?id={anilist_id}&file={quote(filename)}&t={prev_at}&token={tokenthumb}"
+    preview = f"http://anidub.mrcolt.ru/anime/preview?id={anilist_id}&file={quote(filename)}&t={prev_at}&token={tokenthumb}"
     similarity_row = str(json_result["docs"][0]["similarity"])
     if "0." in similarity_row:
         similarity = similarity_row.replace("0.", "")[0:2] + "%"
@@ -227,18 +227,18 @@ def getMediaEpisodes(news_id):
                 sibnet_player_titles.append(v.xpath('.//option/text()'))
                 sibnet_player_episodes.append(v.xpath('.//option/@value'))
         else:
-            sibnet_player_titles.append(stormo_player_titles[0] if stormo_player_titles else anidub_player_titles[0] if anidub_player_titles else "")
+            sibnet_player_titles.append(stormo_player_titles[0][0] if stormo_player_titles else anidub_player_titles[0][0] if anidub_player_titles else "")
             sibnet_player_episodes.append(tree.xpath('.//div[@id = "mcode_block"]/iframe/@src')[0].replace("//", "https://"))
 				
     data.append({
         "players" : data_players,
         
         "episodes" : {
-            "title" : stormo_player_titles if stormo_player_titles else anidub_player_titles if anidub_player_titles else sibnet_player if sibnet_player else "",
+            "title" : stormo_player_titles[0] if stormo_player_titles else anidub_player_titles[0] if anidub_player_titles else sibnet_player_titles[0] if sibnet_player_titles else "",
             "url" : {
-                "Stormo" if "Stormo" in data_players else "" : stormo_player_episodes,
-                "Anidub" if "Anidub" in data_players else "" : anidub_player_episodes,
-                "Sibnet" if "Sibnet" in data_players else "" : sibnet_player_episodes
+                "Stormo" if "Stormo" in data_players else "" : stormo_player_episodes[0],
+                "Anidub" if "Anidub" in data_players else "" : anidub_player_episodes[0],
+                "Sibnet" if "Sibnet" in data_players else "" : sibnet_player_episodes[0]
             }
         }
     })
@@ -313,4 +313,4 @@ def index():
     return "wat do u want?"
 
 if __name__ == '__main__':
-    app.run(host='127.0.0.1', port=5000, debug=False)
+    app.run(host='127.0.0.1', port=5000, debug=True)
