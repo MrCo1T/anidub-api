@@ -31,7 +31,7 @@ app = Flask(__name__)
 
 @app.route("/anime/preview", methods=["GET"])
 def whatsAnimePreview():
-    resp = requests.get(f"https://trace.moe/preview.php?anilist_id={request.args.get('id')}&file={quote(request.args.get('file'))}&t={request.args.get('t')}&token={request.args.get('token')}", headers=HEADERS)
+    resp = requests.get(f"https://trace.moe/preview.php?anilist_id={request.args.get('id')}&file={quote(request.args.get('file'))}&t={request.args.get('t')}&token={request.args.get('token')}", headers=HEADERS, stream=True)
     return Response(stream_with_context(resp.iter_content()), content_type = resp.headers['Content-Type'])
 
 @app.route("/anime/find", methods=["POST"])
@@ -205,31 +205,30 @@ def getMediaEpisodes(news_id):
     if "ya" in media_player:
         data_players.append("Stormo")
         stormo_contents = tree.xpath('.//select[@id = "sel3"]')
-        
-        for stormo_player, i in zip(stormo_contents, range(0, len(stormo_contents[0]))):
-                stormo_player_titles.append(stormo_player.xpath('.//option/text()')[i])
-                stormo_player_episodes.append(stormo_player.xpath('.//option/@value')[i])
+
+        for _, v in enumerate(stormo_contents):
+            stormo_player_titles.append(v.xpath('.//option/text()'))
+            stormo_player_episodes.append(v.xpath('.//option/@value'))
 
     if "our" in media_player:
         data_players.append("Anidub")
         anidub_player_contents = tree.xpath('.//select[@id = "sel2"]')
-        
-        for anidub_player, i in zip(anidub_player_contents, range(0, len(anidub_player_contents[0]))):
-            anidub_player_titles.append(anidub_player.xpath('.//option/text()')[i])
-            anidub_player_episodes.append(anidub_player.xpath('.//option/@value')[i])
+
+        for _, v in enumerate(anidub_player_contents):
+            anidub_player_titles.append(v.xpath('.//option/text()'))
+            anidub_player_episodes.append(v.xpath('.//option/@value'))
 
     if "vk" in media_player:
         data_players.append("Sibnet")
         sibnet_player_contents = tree.xpath('.//select[@id = "sel"]')
         
         if sibnet_player_contents:
-            for sibnet_player, i in zip(sibnet_player_contents, range(0, len(sibnet_player_contents[0]))):
-                sibnet_player_titles.append(sibnet_player.xpath('.//option/text()')[i])
-                sibnet_player_episodes.append(sibnet_player.xpath('.//option/@value')[i])
+            for _, v in enumerate(sibnet_player_contents):
+                sibnet_player_titles.append(v.xpath('.//option/text()'))
+                sibnet_player_episodes.append(v.xpath('.//option/@value'))
         else:
-            sibnet_player_titles.append(anidub_player_titles[0] if anidub_player_titles else stormo_player_titles[0] if stormo_player_titles else "")
+            sibnet_player_titles.append(stormo_player_titles[0] if stormo_player_titles else anidub_player_titles[0] if anidub_player_titles else "")
             sibnet_player_episodes.append(tree.xpath('.//div[@id = "mcode_block"]/iframe/@src')[0].replace("//", "https://"))
-            print(sibnet_player_episodes)
 				
     data.append({
         "players" : data_players,
@@ -314,4 +313,4 @@ def index():
     return "wat do u want?"
 
 if __name__ == '__main__':
-    app.run(host='127.0.0.1', port=5000, debug=True)
+    app.run(host='127.0.0.1', port=5000, debug=False)
