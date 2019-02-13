@@ -133,7 +133,7 @@ def getMedia():
                 if "&#1046;&#1072;&#1085;&#1088;:" in detail: genre = ', '.join(current_detail.xpath('.//span/a/text()'))
                 if "&#1057;&#1090;&#1088;&#1072;&#1085;&#1072;" in detail: country = ''.join(current_detail.xpath('.//span/a/text()'))
             episode_row = re.search(r"\[(.*?)\]", title[-1])
-            episode_row.group(1) if episode_row else "1 из 1"
+            episode = episode_row.group(1) if episode_row else "1 из 1"
             title_ru = title[0]
             title_en = title[-1].split("[")[0].lstrip()
             if "display:inline;" in parsed_body: description = ''.join(n_body.xpath('.//div[@style="display:inline;"]/text()'))
