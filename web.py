@@ -46,7 +46,7 @@ def getMediaEpisodes():
         }
     })
 
-    return getResponseAnswer(False, "Ok", data[0])
+    return getResponseAnswer(False, 0, "", data[0])
 
 
 @app.route("/media/search", methods=["GET"])
@@ -103,7 +103,7 @@ def getMediaSearch():
                 "description" : description
             })
         
-    return getResponseAnswer(False, "Ok", data)
+    return getResponseAnswer(False, 0, "", data)
 
 
 @app.route("/media", methods=["GET"])
@@ -150,14 +150,16 @@ def getMedia():
                 "description" : description
             })
         
-    return getResponseAnswer(False, "Ok", data)
+    return getResponseAnswer(False, 0, "", data)
 
-def getResponseAnswer(error = False, message = "Ok", data = 0):
+def getResponseAnswer(error = False, error_code = 700, error_message = "", data = 0):
+    if error:
+        return jsonify({
+        "status" : "error",
+        "error" : { "error_code" : error_code,
+                    "error_message" : error_message }})
     return jsonify({
-        "status" : {
-            "error" : False,
-            "message" : "Ok"
-        },
+        "status" : "success",
         "data" : data})
 
 
