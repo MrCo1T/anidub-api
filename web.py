@@ -28,12 +28,28 @@ def sendRequest(method, url, data=[]):
     return session.request(method, url, data=data, headers=HEADERS, verify=False)
 
 
+def getFile(file_name):
+    with open(file_name) as file:
+        return file.read()
+
+@app.errorhandler(500)
+def page_not_found(e):
+    return getResponseAnswer(error=True, error_code=500, error_message="Страница временно не доступна")
+
+@app.route("/app/update", methods=["GET"])
+def appUpdate():
+    data = []
+    data.append(eval(getFile("update.json")))
+    return getResponseAnswer(False, 0, "", data[0])
+
+
 @app.route("/media/episodes", methods=["GET"])
 def getMediaEpisodes():
     data = []
     news_id = request.args.get("news_id")
     response = sendRequest("GET", f"{EPISODES_LIST}{news_id}")
     parsed_html = etree.HTML(response.text)
+    adult_content = True if "&#1085;&#1077; &#1080;&#1084;&#1077;&#1102;&#1090; &#1076;&#1086;&#1089;&#1090;&#1091;&#1087;&#1072;" in response.text else False
     media_players = parsed_html.xpath(
         './/div[@class="player"]/ul[@class="tabs"]/li/@id'
     )
@@ -49,6 +65,7 @@ def getMediaEpisodes():
             )
     data.append(
         {
+            "adult" : adult_content,
             "episodes": {
                 "title": anidub_player_titles,
                 "url": {"Anidub": anidub_player_episodes},
@@ -273,4 +290,4 @@ def index():
 
 
 if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=5000, debug=True)
+    app.run(host="127.0.0.1", port=5000, debug=False, threaded=True)
